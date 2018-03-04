@@ -1,0 +1,394 @@
+---
+title: "Chapter 2"
+author: "Dominik Klepl"
+date: "8 2 2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup}
+library(rethinking)
+```
+
+## R code 2.1
+Bag of 4 marbles (blue and white) and sequence BWB was drawn - number of ways the sequence could be drawn assuming all proportions of blue and white marbles:
+
+4xW then there is 0 ways - 0x4x0
+1xB+3xW => 1x3x1 = 3 ways
+2xW => 2x2x2 = 8
+3xB+1xW => 3x1x3 = 9
+4xB => 4x0x4 = 0
+
+```{r}
+ways <- c( 0 , 3 , 8 , 9 , 0 ) #possible ways each proportion can produce given sequence
+ways/sum(ways) #how plausible is each proportion of marbles? also probabilities because they are standardized to add up to 1 together
+```
+
+Paramater = proportion of marbles p
+
+Likelihood = number of ways p can produce the data (enumerating all possible data sequences and eliminating the inconsistent ones)
+
+Prior probability = prior plausibility of any specific p
+
+Posterior probability = new, updated plausibility of any specific p given the data
+
+## R code 2.2 (p. 33)
+Tossing a globe and counting landings on water and land - 50-50 chance 
+How big is the likelihood of getting 6x water in sample of 9
+```{r}
+dbinom( 6, size=9 , prob=0.5 ) #number of W observations, number of tosses, probability of water in each toss (tosses are independent)
+
+#why is it the same???
+A=dbinom( 5, size=9 , prob=0.5 )
+B=dbinom( 4, size=9 , prob=0.5 )
+A==B
+```
+
+## R code 2.3 (p. 40) - Grid approximation
+Estimating posterior distribution of the globe tossing example
+
+With prior as a straight line = 1
+```{r}
+# define grid
+p_grid = seq( from=0 , to=1 , length.out=100) #sequence of probability of water from 0 (no water) to 1 (only water) using 20 points on the grid
+# 
+
+# define prior
+prior = rep (1 , length(p_grid) ) #just a straight line => 20x1
+
+# compute likelihood at each value in grid
+likelihood = dbinom( 6 , size=9 , prob=p_grid )
+
+# compute product of likelihood and prior
+unstd.posterior = likelihood * prior #with prior =1 the posterior=likelihood
+
+# standardize the posterior, so it sums to 1
+posterior = unstd.posterior / sum(unstd.posterior)
+
+#now plot the posterior distribution
+plot( p_grid , posterior , type="b" ,
+      xlab="probability of water" , ylab="posterior probability" )
+mtext( "20 points" )
+
+#redo this with ggplot
+library(ggplot2)
+#put all data together into one df
+line_posterior = as.data.frame(cbind(p_grid,posterior))
+ggplot(line_posterior,aes(p_grid,posterior))+
+  geom_line()+
+  ggtitle(label="20 points")+
+  xlab("probability of water")+
+  ylab("posterior probability") 
+```
+
+Let's try some different priors
+
+First step prior function
+```{r}
+prior = ifelse( p_grid < 0.5 , 0 , 1 )
+
+# compute product of likelihood and prior
+unstd.posterior = likelihood * prior #with prior =1 the posterior=likelihood
+
+# standardize the posterior, so it sums to 1
+posterior = unstd.posterior / sum(unstd.posterior)
+
+step_posterior = as.data.frame(cbind(p_grid,posterior))
+
+ggplot(step_posterior,aes(p_grid,posterior))+
+  geom_line()+
+  ggtitle(label="20 points")+
+  xlab("probability of water")+
+  ylab("posterior probability") 
+```
+
+And spike
+```{r}
+prior = exp( -5*abs( p_grid - 0.5 ) )
+
+# compute product of likelihood and prior
+unstd.posterior = likelihood * prior #with prior =1 the posterior=likelihood
+
+# standardize the posterior, so it sums to 1
+posterior = unstd.posterior / sum(unstd.posterior)
+
+spike_posterior = as.data.frame(cbind(p_grid,posterior))
+
+ggplot(spike_posterior,aes(p_grid,posterior))+
+  geom_line()+
+  ggtitle(label="20 points")+
+  xlab("probability of water")+
+  ylab("posterior probability") 
+```
+
+
+
+## R code 2.6 - Quadratic Approximation
+1) find the posterior mode (peak of the distribution)
+2) estimate curvature near the peak - from that whole posterior distribution is estimated
+
+
+```{r}
+#map = maximum a posteriori
+globe.qa = map(
+    alist(
+        w ~ dbinom(9,p) ,  # binomial likelihood
+        p ~ dunif(0,1)     # uniform prior
+    ) ,
+    data=list(w=6) )
+
+# display summary of quadratic approximation
+precis( globe.qa )
+```
+mean = peak of the distribution = maximum posterior
+SD = standard deviation of the posterior distribution
++89% confidence interval
+
+Assuming the posterior is Gaussian, it is maximized at 0.67, and its SD is 0.16
+
+Analytical calculation (look up explanation somewhere else, maybe lecture???) that gives an exact right answer to compare with performance of quadratic approximation
+```{r}
+## R code 2.7
+# analytical calculation
+w = 6
+n = 9
+curve( dbeta( x , w+1 , n-w+1 ) , from=0 , to=1 )
+# quadratic approximation
+curve( dnorm( x , 0.67 , 0.16 ) , lty=2 , add=TRUE )
+```
+
+#PRACTICE PROBLEMS (p. 45-47)
+
+##MEDIUM 1
+```{r}
+#build function to make this faster
+get_posterior = function (obs, size,prior,grid) {
+  likelihood = dbinom( obs , size=size , prob=grid )
+  # compute product of likelihood and prior
+  unstd.posterior = likelihood * prior #with prior =1 the posterior=likelihood
+  # standardize the posterior, so it sums to 1
+  posterior = unstd.posterior / sum(unstd.posterior)
+  df_posterior = as.data.frame(cbind(grid,posterior))
+  
+  print(ggplot(df_posterior,aes(grid,posterior))+
+          geom_line()+
+          ggtitle(label="100 points")+
+          xlab("probability of water")+
+          ylab("posterior probability")
+  )
+
+return (df_posterior)
+}
+
+#prior for this problem is the same for all
+prior = rep (1 , length(p_grid) ) #just a straight line => 20x1
+#and grid
+p_grid = seq( from=0 , to=1 , length.out=100)
+
+#1. WWW
+answer=get_posterior(3,3,prior,p_grid)
+answer$grid[answer$posterior==max(answer$posterior)]
+
+#2. WWWL
+answer=get_posterior(obs=3,size=4,prior,p_grid)
+answer$grid[answer$posterior==max(answer$posterior)]
+
+
+#3. LWWLWWW
+answer=get_posterior(obs=5,size=7,prior,p_grid)
+answer$grid[answer$posterior==max(answer$posterior)]
+```
+
+##MEDIUM 2
+```{r}
+#now as in 1 just with step prior
+prior = ifelse(test = p_grid < .5, yes = 0, no = 1)
+
+#1. WWW
+answer=get_posterior(3,3,prior,p_grid)
+answer$grid[answer$posterior==max(answer$posterior)]
+
+#2. WWWL
+answer=get_posterior(obs=3,size=4,prior,p_grid)
+answer$grid[answer$posterior==max(answer$posterior)]
+
+
+#3. LWWLWWW
+answer=get_posterior(obs=5,size=7,prior,p_grid)
+answer$grid[answer$posterior==max(answer$posterior)]
+```
+
+
+##MEDIUM 3
+```{r}
+prior = c(.5, .5)
+likelihood = c(.3, 1)
+unstd_posterior = prior*likelihood
+posterior = unstd_posterior / sum(unstd_posterior)
+posterior
+```
+
+##MEDIUM 4
+```{r}
+#n of ways black side could be produced
+  #2 black sides => 2
+  #1 black 1 white => 1
+  #2 whites => 0
+
+likelihood = c(2, 1, 0)
+prior = rep (1, 3)
+unstd_posterior = likelihood*prior
+
+posterior = unstd_posterior/sum(unstd_posterior)
+
+posterior[1] ==2/3
+```
+
+##MEDIUM 5
+```{r}
+#now I have two black-black cards so posterior change for them as they are twice as likely to be drawn
+prior[1] = prior[1]*2
+unstd_posterior = likelihood*prior
+
+posterior = unstd_posterior/sum(unstd_posterior)
+
+posterior[1]
+```
+
+##MEDIUM 6
+```{r}
+#likelihood still the same
+#prior changes
+prior = c(1,2,3)
+
+unstd_posterior = likelihood*prior
+
+posterior = unstd_posterior/sum(unstd_posterior)
+
+posterior[1] ==0.5
+```
+
+##MEDIUM 7
+```{r}
+card.1.2.likelihood = 2
+card.2.1.likelihood = 0
+card.1.3.likelihood = 4
+card.3.1.likelihood = 0
+card.2.3.likelihood = 2
+card.3.2.likelihood = 0
+
+likelihood = c(card.1.2.likelihood, card.2.1.likelihood, card.1.3.likelihood, card.3.1.likelihood, card.2.3.likelihood, card.3.2.likelihood)
+prior = rep(x = 1, length = length(likelihood))
+unstandardized.posterior = prior * likelihood
+posterior = unstandardized.posterior / sum(unstandardized.posterior)
+
+# the probability that the other side of the first card is black is equal to the probability that the first card is card 1,
+# which equals the probability that the sequence we've chosen is either (1, 2), or (1, 3)
+posterior[1] + posterior[3] == 0.75
+```
+
+##HARD 1
+```{r}
+species_A = 0.1
+species_B = 0.2
+
+likelihood = c(species_A,species_B)
+
+prior = c(0.5,0.5)
+unstandardized.posterior = prior * likelihood
+posterior = unstandardized.posterior / sum(unstandardized.posterior)
+
+posterior[1]*.1 + posterior[2]*.2
+```
+
+##HARD 2
+```{r}
+posterior[1]
+```
+
+##HARD 3
+```{r}
+# First birth = Twins
+# Second birth = Single
+# P(Species = A| Twins, Single)?
+
+# P(Species = A | Twins, Single) = P(Twins | Species = A) *
+#                                   P(Single | Species = A) *
+#                                      P(A) /
+#                                         P(Twins,Single)
+# P(Twins,Single) =  P(Twins | Species = A) *
+#                       P(Single | Species = A) *
+#                          P(A) +
+#                    P(Twins | Species = B) *
+#                       P(Single | Species = B) *
+#                          P(B)
+
+p_A_twins_single = (0.1 * 0.9 * 0.5) / ((0.1 * 0.9 * 0.5) + (0.2 * 0.8 * 0.5))
+
+p_A_twins_single
+```
+
+##HARD 4
+
+###HARD 4.1
+```{r}
+#first just the test
+prior = c(0.5,0.5)
+
+likelihood = c(.8,1-.65)
+
+unstandardized.posterior = prior * likelihood
+posterior = unstandardized.posterior / sum(unstandardized.posterior)
+
+posterior[1]
+```
+###HARD 4.2
+```{r}
+#posterior from 4.1 becomes prior now
+prior = posterior
+
+#and add the likelihood from H3 - probability of both species having twins and then single
+species_A = 0.1 * (1-0.1)
+species_B = 0.2 * (1-0.2)
+
+likelihood = c(species_A,species_B)
+
+unstandardized.posterior = prior * likelihood
+posterior = unstandardized.posterior / sum(unstandardized.posterior)
+
+posterior[1]
+```
+
+#BONUS
+Show the change of in probability with adding evidence
+
+```{r}
+evidence = factor(rep(c("prior", 
+                        "prior + twins", 
+                        "prior + twins + single", 
+                        "prior + twins + single + test = A"), 
+               each = 2), 
+               levels = c("prior", 
+                        "prior + twins", 
+                        "prior + twins + single", 
+                        "prior + twins + single + test = A"))
+species = rep(c("Species A", "Species B"), 4)
+prob = c(0.5, 0.5, 0.33, 0.67, 0.36, 0.64, 0.57, 0.43)
+change_df <- data.frame(species = species,
+                        evidence = evidence,
+                        prob = prob)
+ggplot(change_df, aes(x = evidence, 
+                      y = prob, 
+                      colour = species, 
+                      group = species)) +
+  geom_line() +
+  geom_point(size = 3) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5)) +
+  xlab("Data") +
+  ylab("Posterior Probability")
+```
+
+

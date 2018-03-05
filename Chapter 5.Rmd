@@ -249,15 +249,18 @@ pairs(d)
 
 
 ## R code 5.16
+In the "milk" we're interested in hypothesis that animals with larger neocortex have also milk higher in energy (measured in kcal).
 ```{r}
 library(rethinking)
 data(milk)
-d <- milk
+d = milk
 str(d)
 ```
 
 ## R code 5.17
-m5.5 <- map(
+Begin with bivariate regression
+```{r}
+m5.5 = map(
     alist(
         kcal.per.g ~ dnorm( mu , sigma ) ,
         mu <- a + bn*neocortex.perc ,
@@ -265,16 +268,21 @@ m5.5 <- map(
         bn ~ dnorm( 0 , 1 ) ,
         sigma ~ dunif( 0 , 1 )
     ) ,
-    data=d )
+    data=d ) #great there are NAs somewhere
+```
 
 ## R code 5.18
+Yep NAs in neocortex % column
+```{r}
 d$neocortex.perc
+sum(is.na(d$neocortex.perc)) #12 NAs
 
-## R code 5.19
-dcc <- d[ complete.cases(d) , ]
 
-## R code 5.20
-m5.5 <- map(
+## R code 5.19 - so remove the NAs and work with only complete cases
+dcc = d[ complete.cases(d) , ]
+
+## R code 5.20 - and fit the model again using dcc data
+m5.5 = map(
     alist(
         kcal.per.g ~ dnorm( mu , sigma ) ,
         mu <- a + bn*neocortex.perc ,
@@ -283,14 +291,19 @@ m5.5 <- map(
         sigma ~ dunif( 0 , 1 )
     ) ,
     data=dcc )
+```
 
 ## R code 5.21
-precis( m5.5 , digits=3 )
+```{r}
+precis( m5.5 , digits=3 ) #bn is very small
 
 ## R code 5.22
-coef(m5.5)["bn"] * ( 76 - 55 )
+coef(m5.5)["bn"] * ( 76 - 55 ) #this would be the expected change between the lowest and highest value - the relationship seems small
+```
 
 ## R code 5.23
+Also the 89% interval suggests the estimate is quite unreliable. Plot the predicted mean to see that better.
+```{r}
 np.seq <- 0:100
 pred.data <- data.frame( neocortex.perc=np.seq )
 
@@ -302,8 +315,11 @@ plot( kcal.per.g ~ neocortex.perc , data=dcc , col=rangi2 )
 lines( np.seq , mu.mean )
 lines( np.seq , mu.PI[1,] , lty=2 )
 lines( np.seq , mu.PI[2,] , lty=2 )
+```
 
-## R code 5.24
+## R code 5.24-5
+Let's predict calories of milk from body mass of mother. It's often true that scaled measurements relate by magnitude to other variables. Therefore we log transform the body mass.
+```{r}
 dcc$log.mass <- log(dcc$mass)
 
 ## R code 5.25
@@ -317,9 +333,30 @@ m5.6 <- map(
     ) ,
     data=dcc )
 precis(m5.6)
+```
+Association is stronger but negative this time and again quite unreliable, both stronger and way weaker effects are possible. Let's plot it again as before.
+
+```{r}
+#range of log_mass
+range(dcc$log.mass)
+
+mass.seq = seq(-2.5,4.5,length.out = 100)
+pred.data2 = data.frame( log.mass=mass.seq )
+
+mu = link( m5.6 , data=pred.data2 , n=1e4 )
+mu.mean = apply( mu , 2 , mean )
+mu.PI = apply( mu , 2 , PI )
+
+plot( kcal.per.g ~ log.mass , data=dcc , col=rangi2 )
+lines( mass.seq , mu.mean )
+lines( mass.seq , mu.PI[1,] , lty=2 )
+lines( mass.seq , mu.PI[2,] , lty=2 )
+```
 
 ## R code 5.26
-m5.7 <- map(
+Let's move to the multivariate model now with both neocortex and log.mass as predictors.
+```{r}
+m5.7 = map(
     alist(
         kcal.per.g ~ dnorm( mu , sigma ) ,
         mu <- a + bn*neocortex.perc + bm*log.mass ,
@@ -330,45 +367,78 @@ m5.7 <- map(
     ) ,
     data=dcc )
 precis(m5.7)
+```
 
 ## R code 5.27
-mean.log.mass <- mean( log(dcc$mass) )
-np.seq <- 0:100
-pred.data <- data.frame(
+Let's make a counterfactual plot to show the relationship between energy and neocortex by keeping log.mass constant at its mean.
+```{r}
+mean.log.mass = mean( log(dcc$mass) )
+np.seq = 0:100
+pred.data = data.frame(
     neocortex.perc=np.seq,
     log.mass=mean.log.mass
+)
+
+mu = link( m5.7 , data=pred.data , n=1e4 )
+mu.mean = apply( mu , 2 , mean )
+mu.PI = apply( mu , 2 , PI )
+
+plot( kcal.per.g ~ neocortex.perc , data=dcc , type="n" )
+lines( np.seq , mu.mean )
+lines( np.seq , mu.PI[1,] , lty=2 )
+lines( np.seq , mu.PI[2,] , lty=2 )
+```
+
+And now the same for log.mass while keeping neocortex.perc constant.
+```{r}
+mean.neocortex = mean(dcc$neocortex.perc)
+mass.seq = seq(-2.5,4.5,length.out = 100)
+
+pred.data <- data.frame(
+    log.mass=mass.seq,
+    neocortex.perc=mean.neocortex
 )
 
 mu <- link( m5.7 , data=pred.data , n=1e4 )
 mu.mean <- apply( mu , 2 , mean )
 mu.PI <- apply( mu , 2 , PI )
 
-plot( kcal.per.g ~ neocortex.perc , data=dcc , type="n" )
-lines( np.seq , mu.mean )
-lines( np.seq , mu.PI[1,] , lty=2 )
-lines( np.seq , mu.PI[2,] , lty=2 )
-
-## R code 5.28
+plot( kcal.per.g ~ log.mass , data=dcc , type="n" )
+lines(mass.seq , mu.mean )
+lines(mass.seq , mu.PI[1,] , lty=2 )
+lines(mass.seq , mu.PI[2,] , lty=2 )
+```
+## R code 5.28 
+Overthinking box - simulating masking relationship
+```{r}
 N <- 100                         # number of cases
-rho <- 0.7                       # correlation btw x_pos and x_neg
+rho <- 0.5                     # correlation btw x_pos and x_neg
 x_pos <- rnorm( N )              # x_pos as Gaussian
 x_neg <- rnorm( N , rho*x_pos ,  # x_neg correlated with x_pos
     sqrt(1-rho^2) )
 y <- rnorm( N , x_pos - x_neg )  # y equally associated with x_pos, x_neg
 d <- data.frame(y,x_pos,x_neg)   # bind all together in data frame
+cor(d$x_pos,d$x_neg)
+pairs(d)
+```
 
-## R code 5.29
-N <- 100                          # number of individuals
-height <- rnorm(N,10,2)           # sim total height of each
-leg_prop <- runif(N,0.4,0.5)      # leg as proportion of height
-leg_left <- leg_prop*height +     # sim left leg as proportion + error
+## R code 5.29 - Multicollinearity
+First only simulation - predicting height from individuals lenght of both legs.
+```{r}
+N =100                          # number of individuals
+height = rnorm(N,10,2)           # sim total height of each
+leg_prop = runif(N,0.4,0.5)      # leg as proportion of height
+leg_left= leg_prop*height +     # sim left leg as proportion + error
     rnorm( N , 0 , 0.02 )
-leg_right <- leg_prop*height +    # sim right leg as proportion + error
+leg_right = leg_prop*height +    # sim right leg as proportion + error
     rnorm( N , 0 , 0.02 )
                                   # combine into data frame
-d <- data.frame(height,leg_left,leg_right)
+d = data.frame(height,leg_left,leg_right)
+```
 
 ## R code 5.30
+Fit model that uses both legs as predictor. We expect association between leg and height around ß~2.2 (because average height=10 /average proportion of legs to rest of height=4.5).
+```{r}
 m5.8 <- map(
     alist(
         height ~ dnorm( mu , sigma ) ,
@@ -383,16 +453,25 @@ precis(m5.8)
 
 ## R code 5.31
 plot(precis(m5.8))
+```
+So what's happening here?
 
-## R code 5.32
+## R code 5.32 - this should help
+Because both predictors include basically the same info they are highly correlated. The model is answering question; what additional info do I get from knowing lenght of right leg after I already saw the left one. The model than basically treats bl and br as the same predictor but associated 2 parameters to them like this; mu= Int + (ß1+ß2)*x. These two never influence mu separately. The resulting posterior is therefore an infinite combination of ß1 and ß2. To get the real association of leg legnth to height we need to sum the posterior of ß1 and ß2 together.
+```{r}
 post <- extract.samples(m5.8)
 plot( bl ~ br , post , col=col.alpha(rangi2,0.1) , pch=16 )
+```
 
 ## R code 5.33
+```{r}
 sum_blbr <- post$bl + post$br
 dens( sum_blbr , col=rangi2 , lwd=2 , xlab="sum of bl and br" )
+```
 
 ## R code 5.34
+If we fit only one leg then we get approximately the same posterior as the summed one above.
+```{r}
 m5.9 <- map(
     alist(
         height ~ dnorm( mu , sigma ) ,
@@ -403,13 +482,19 @@ m5.9 <- map(
     ) ,
     data=d )
 precis(m5.9)
+```
 
 ## R code 5.35
+Return to the milk data and explore multicollinearity there.
+```{r}
 library(rethinking)
 data(milk)
 d <- milk
+```
 
 ## R code 5.36
+First model kcal/g ~ % of fat and % of lactose as separate bivariate regressions.
+```{r}
 # kcal.per.g regressed on perc.fat
 m5.10 <- map(
     alist(
@@ -434,8 +519,13 @@ m5.11 <- map(
 
 precis( m5.10 , digits=3 )
 precis( m5.11 , digits=3 )
+```
+
+These 2 posteriors are basically opposites of each other.
 
 ## R code 5.37
+What happens if we use both predictors in the same model.
+```{r}
 m5.12 <- map(
     alist(
         kcal.per.g ~ dnorm( mu , sigma ) ,
@@ -447,35 +537,51 @@ m5.12 <- map(
     ) ,
     data=d )
 precis( m5.12 , digits=3 )
+```
+Both ßs are close to zero now with 89% intervals on both sides of 0. And SDs are twice as large.
 
 ## R code 5.38
+Easier to see what's happening here.
+```{r}
 pairs( ~ kcal.per.g + perc.fat + perc.lactose ,
     data=d , col=rangi2 )
+```
+The scatterplot shows very strong negative correlation between lactose and fat. 
 
 ## R code 5.39
-cor( d$perc.fat , d$perc.lactose )
+Calculate the correlation between them. 
+```{r}
+cor( d$perc.fat , d$perc.lactose ) #wow baby
+```
 
-## R code 5.40
+#Simulation experiment to understand collinearity 
+```{r}
 library(rethinking)
 data(milk)
-d <- milk
-sim.coll <- function( r=0.9 ) {
-    d$x <- rnorm( nrow(d) , mean=r*d$perc.fat ,
+d = milk
+sim.coll = function( r=0.9 ) {
+    d$x = rnorm( nrow(d) , mean=r*d$perc.fat ,
         sd=sqrt( (1-r^2)*var(d$perc.fat) ) )
-    m <- lm( kcal.per.g ~ perc.fat + x , data=d )
+    m = lm( kcal.per.g ~ perc.fat + x , data=d )
     sqrt( diag( vcov(m) ) )[2] # stddev of parameter
 }
-rep.sim.coll <- function( r=0.9 , n=100 ) {
-    stddev <- replicate( n , sim.coll(r) )
+rep.sim.coll = function( r=0.9 , n=100 ) {
+    stddev = replicate( n , sim.coll(r) )
     mean(stddev)
 }
-r.seq <- seq(from=0,to=0.99,by=0.01)
-stddev <- sapply( r.seq , function(z) rep.sim.coll(r=z,n=100) )
+r.seq = seq(from=0,to=0.99,by=0.001)
+stddev = sapply( r.seq , function(z) rep.sim.coll(r=z,n=100) )
 plot( stddev ~ r.seq , type="l" , col=rangi2, lwd=2 , xlab="correlation" )
+```
 
-## R code 5.41
+
+
+## R code 5.41 Post-treatment bias
+Worrying about mistaken inferences arising from including variables that are consequences of other.
+An example: interested in effect of treatment of heigth of plants. +we presence of fungus after treatment is measured (only 1 or 0). It's wrong to include fungus variable because that's post-treatment. Let's see why and what happens if we do.
+```{r}
 # number of plants
-N <- 100
+N <- 1e3
 
 # simulate initial heights
 h0 <- rnorm(N,10,2)
@@ -487,8 +593,10 @@ h1 <- h0 + rnorm(N, 5 - 3*fungus)
 
 # compose a clean data frame
 d <- data.frame( h0=h0 , h1=h1 , treatment=treatment , fungus=fungus )
+```
 
 ## R code 5.42
+```{r}
 m5.13 <- map(
     alist(
         h1 ~ dnorm(mu,sigma),
@@ -499,8 +607,12 @@ m5.13 <- map(
     ),
     data=d )
 precis(m5.13)
+```
+So the effect of treatment is very small now and effect of fungus is quite big although the simulation data is constrructed so that treatment really does matter. It's mainly because fungus is consequence of treatment.
 
 ## R code 5.43
+Since we're interested in effect of soil treatment we should omit the fungus predictor
+```{r}
 m5.14 <- map(
     alist(
         h1 ~ dnorm(mu,sigma),
@@ -511,11 +623,14 @@ m5.14 <- map(
     ),
     data=d )
 precis(m5.14)
+```
 
-## R code 5.44
+## R code 5.44 - Categorical variables
+```{r}
 data(Howell1)
 d <- Howell1
 str(d)
+```
 
 ## R code 5.45
 m5.15 <- map(

@@ -449,9 +449,8 @@ lines( weight.seq , mu.mean )
 shade( mu.HPDI , weight.seq )
 ```
 
-## R code 4.58
+## R code 4.58 - how link function works
 ```{r}
-#just and explanation how link function works
 post = extract.samples(m4.3)
 mu.link = function(weight) post$a + post$b*weight
 weight.seq = seq( from=25 , to=70 , by=1 )

@@ -119,7 +119,7 @@ m.resid <- d$Marriage.s - mu
 ```
 
 ## R code 5.8
-And now plot the residual marriag rate in each state after prediction from median marriage age.
+And now plot the residual marriage rate in each state after prediction from median marriage age.
 ```{r}
 plot( Marriage.s ~ MedianAgeMarriage.s , d , col=rangi2 )
 abline( m5.4 )
@@ -633,6 +633,8 @@ str(d)
 ```
 
 ## R code 5.45
+Fit model: height ~ male
+```{r}
 m5.15 <- map(
     alist(
         height ~ dnorm( mu , sigma ) ,
@@ -642,14 +644,20 @@ m5.15 <- map(
         sigma ~ dunif( 0 , 50 )
     ) ,
     data=d )
-precis(m5.15)
+precis(m5.15,corr = T)
+```
 
 ## R code 5.46
+Adding a+bm results in posterior mean average male height. To consider also the width of posterior we can't just sum the boundaries in precis because they're correlated. But sampling fixes the problam.
+```{r}
 post <- extract.samples(m5.15)
 mu.male <- post$a + post$bm
 PI(mu.male)
+```
 
-## R code 5.47
+## R code 5.47 Overthinking: Re-parameterizing
+This is the same model as above just with creating a parameter for both genders
+```{r}
 m5.15b <- map(
     alist(
         height ~ dnorm( mu , sigma ) ,
@@ -660,7 +668,12 @@ m5.15b <- map(
     ) ,
     data=d )
 
-## R code 5.48
+precis(m5.15b)
+```
+
+## R code 5.48 Many categories
+We need to create one less dummy variables than categories. The last category will be intercept.
+```{r}
 data(milk)
 d <- milk
 unique(d$clade)
@@ -671,8 +684,10 @@ unique(d$clade)
 ## R code 5.50
 d$clade.OWM <- ifelse( d$clade=="Old World Monkey" , 1 , 0 )
 d$clade.S <- ifelse( d$clade=="Strepsirrhine" , 1 , 0 )
+```
 
 ## R code 5.51
+```{r}
 m5.16 <- map(
     alist(
         kcal.per.g ~ dnorm( mu , sigma ) ,
@@ -685,8 +700,11 @@ m5.16 <- map(
     ) ,
     data=d )
 precis(m5.16)
+```
 
 ## R code 5.52
+Now we want the posterior distributions of average milk energy. We use samples.
+```{r}
 # sample posterior
 post <- extract.samples(m5.16)
 
@@ -698,16 +716,24 @@ mu.S <- post$a + post$b.S
 
 # summarize using precis
 precis( data.frame(mu.ape,mu.NWM,mu.OWM,mu.S) )
+```
 
 ## R code 5.53
+To re-parameterize model to estimate the difference between two categories we just subtract the two estimates +get 95% interval + median
+```{r}
 diff.NWM.OWM <- mu.NWM - mu.OWM
 quantile( diff.NWM.OWM , probs=c(0.025,0.5,0.975) )
 
+precis(data.frame(diff.NWM.OWM))
+```
+
 ## R code 5.54
-( d$clade_id <- coerce_index(d$clade) )
+Another approach is to specify unique intercept for each category.
+```{r}
+d$clade_id = coerce_index(d$clade)
 
 ## R code 5.55
-m5.16_alt <- map(
+m5.16_alt = map(
     alist(
         kcal.per.g ~ dnorm( mu , sigma ) ,
         mu <- a[clade_id] ,
@@ -716,8 +742,11 @@ m5.16_alt <- map(
     ) ,
     data=d )
 precis( m5.16_alt , depth=2 )
+```
 
-## R code 5.56
+
+## R code 5.56 Ordinary least squares
+```{r}
 m5.17 <- lm( y ~ 1 + x , data=d )
 m5.18 <- lm( y ~ 1 + x + z + w , data=d )
 
@@ -740,6 +769,7 @@ m5.23 <- lm( y ~ 1 + x + x2 + x3 , data=d )
 ## R code 5.61
 m5.24 <- lm( y ~ 1 + x + I(x^2) + I(x^3) , data=d )
 
-## R code 5.62
-data(cars)
-glimmer( dist ~ speed , data=cars )
+## R code 5.62  - glimmer function can turn lm formula into map formula
+d=d[complete.cases(d),]
+glimmer(kcal.per.g ~ neocortex.perc + (1|clade) , data=d )
+```
